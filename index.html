@@ -27,10 +27,13 @@
     renderer="logarithmicDepthBuffer: true;"
     webxr="requiredFeatures: local-floor;"
   >
+    <!-- Фон для 3D-режима -->
+    <a-sky color="#87CEEB"></a-sky>
+
     <!-- Первый куб (красный) -->
     <a-box
       id="targetObject1"
-      position="-0.3 0.5 -1"
+      position="-0.3 0.5 -0.5"  <!-- Ближе к камере -->
       rotation="0 0 0"
       scale="0.5 0.5 0.5"
       color="red"
@@ -40,7 +43,7 @@
     <!-- Второй куб (синий) -->
     <a-box
       id="targetObject2"
-      position="0.3 0.5 -1"
+      position="0.3 0.5 -0.5"  <!-- Ближе к камере -->
       rotation="0 0 0"
       scale="0.5 0.5 0.5"
       color="blue"
@@ -141,14 +144,12 @@
     // Проверка доступных камер и выбор задней камеры
     async function startCamera() {
       try {
-        // Получаем список устройств
         const devices = await navigator.mediaDevices.enumerateDevices();
         const videoDevices = devices.filter(device => device.kind === 'videoinput');
         console.log("Available cameras:", videoDevices);
 
         let videoConstraints = { width: window.innerWidth, height: window.innerHeight };
         
-        // Ищем заднюю камеру
         const rearCamera = videoDevices.find(device => 
           device.label.toLowerCase().includes('back') || 
           device.label.toLowerCase().includes('rear') || 
@@ -160,8 +161,8 @@
           videoConstraints.deviceId = { exact: rearCamera.deviceId };
         } else {
           console.warn("Rear camera not found, falling back to default camera.");
-          alert("Rear camera not found. AR may not work correctly. Using default camera.");
-          videoConstraints.facingMode = "environment"; // Пробуем через facingMode
+          alert("Rear camera not found. Using default camera. Switch to rear camera if possible.");
+          videoConstraints.facingMode = "environment";
         }
 
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -206,6 +207,11 @@
     scene.addEventListener("arError", (e) => {
       console.error("AR error:", e.detail);
       alert("AR failed: " + e.detail);
+    });
+
+    // Отладка рендеринга
+    scene.addEventListener("renderstart", () => {
+      console.log("Rendering started. Cubes should be visible in 3D mode.");
     });
   </script>
 </body>
