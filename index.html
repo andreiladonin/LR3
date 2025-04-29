@@ -8,7 +8,7 @@
   <script src="https://cdn.jsdelivr.net/npm/handtrackjs@0.1.1/dist/handtrack.min.js"></script>
   <style>
     body { margin: 0; overflow: hidden; }
-    #videoCanvas { position: absolute; top: 0; left: 0; z-index: 100; }
+    #videoCanvas { position: absolute; top: 0; left: 0; z-index: 100; opacity: 0.5; }
   </style>
 </head>
 <body>
@@ -19,8 +19,9 @@
 
   <!-- A-Frame сцена -->
   <a-scene
+    embedded
     vr-mode-ui="enabled: false"
-    arjs="sourceType: webcam; debugUIEnabled: false;"
+    arjs="sourceType: webcam; debugUIEnabled: true; trackingMethod: best;"
     renderer="logarithmicDepthBuffer: true;"
   >
     <!-- 3D-объект: куб -->
@@ -56,7 +57,10 @@
     // Загрузка модели handtrack.js
     handTrack.load(modelParams).then((lmodel) => {
       model = lmodel;
+      console.log("Handtrack model loaded");
       startVideo();
+    }).catch((err) => {
+      console.error("Failed to load handtrack model:", err);
     });
 
     // Запуск видео с камеры
@@ -66,8 +70,11 @@
           console.log("Video started");
           runDetection();
         } else {
-          console.log("Please enable video");
+          console.error("Failed to start video");
+          alert("Please enable camera access");
         }
+      }).catch((err) => {
+        console.error("Video start error:", err);
       });
     }
 
@@ -83,16 +90,16 @@
           const handWidth = bbox[2];
           const handX = bbox[0] + handWidth / 2;
 
-          // Определение состояния руки: открытая или закрытая
+          // Определение состояния руки
           const aspectRatio = bbox[2] / bbox[3];
-          isHandClosed = aspectRatio > 1.5; // Сжатая ладонь имеет большее соотношение ширины к высоте
+          isHandClosed = aspectRatio > 1.5;
 
           // Управление масштабом
           let scale = parseFloat(targetObject.getAttribute("scale").x);
           if (isHandClosed) {
-            scale = Math.max(0.1, scale - 0.01); // Уменьшение масштаба
+            scale = Math.max(0.1, scale - 0.01);
           } else {
-            scale = Math.min(2.0, scale + 0.01); // Увеличение масштаба
+            scale = Math.min(2.0, scale + 0.01);
           }
           targetObject.setAttribute("scale", `${scale} ${scale} ${scale}`);
 
@@ -100,26 +107,36 @@
           if (lastHandX !== null) {
             const deltaX = handX - lastHandX;
             let rotation = targetObject.getAttribute("rotation");
-            rotation.y += deltaX * 0.5; // Вращение пропорционально перемещению руки
+            rotation.y += deltaX * 0.5;
             targetObject.setAttribute("rotation", rotation);
           }
           lastHandX = handX;
         } else {
-          lastHandX = null; // Сброс при отсутствии руки
+          lastHandX = null;
         }
 
-        // Продолжение обработки
         requestAnimationFrame(runDetection);
+      }).catch((err) => {
+        console.error("Detection error:", err);
       });
     }
 
-    // Адаптация канваса под размер экрана
+    // Адаптация канваса
     window.addEventListener("resize", () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
     });
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
+
+    // Отладка AR
+    document.querySelector("a-scene").addEventListener("loaded", () => {
+      console.log("A-Frame scene loaded");
+    });
+    document.querySelector("a-scene").addEventListener("arError", (e) => {
+      console.error("AR error:", e.detail);
+      alert("AR failed: " + e.detail);
+    });
   </script>
 </body>
 </html>
