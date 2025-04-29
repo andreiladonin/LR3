@@ -24,22 +24,21 @@
   <a-scene
     embedded
     vr-mode-ui="enabled: false"
-    arjs="sourceType: webcam; debugUIEnabled: true; trackingMethod: best;"
     renderer="logarithmicDepthBuffer: true;"
-    webxr="requiredFeatures: local-floor;"
+    webxr="requiredFeatures: local-floor, hand-tracking;"
   >
     <!-- 3D-объект: куб -->
     <a-box
       id="targetObject"
-      position="0 0 -2"
+      position="0 0.5 -1"  <!-- Ближе к камере и чуть выше -->
       rotation="0 0 0"
-      scale="0.5 0.5 0.5"
+      scale="0.3 0.3 0.3"
       color="red"
       material="opacity: 0.8;"
     ></a-box>
 
     <!-- Камера -->
-    <a-entity camera></a-entity>
+    <a-entity camera look-controls></a-entity>
   </a-scene>
 
   <script>
@@ -156,10 +155,18 @@
     canvas.height = window.innerHeight;
 
     // Отладка AR
-    document.querySelector("a-scene").addEventListener("loaded", () => {
+    const scene = document.querySelector("a-scene");
+    scene.addEventListener("loaded", () => {
       console.log("A-Frame scene loaded");
     });
-    document.querySelector("a-scene").addEventListener("arError", (e) => {
+    scene.addEventListener("enter-vr", () => {
+      console.log("Entered AR mode");
+      alert("AR mode activated!");
+    });
+    scene.addEventListener("exit-vr", () => {
+      console.log("Exited AR mode");
+    });
+    scene.addEventListener("arError", (e) => {
       console.error("AR error:", e.detail);
       alert("AR failed: " + e.detail);
     });
