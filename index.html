@@ -48,14 +48,24 @@
     ></a-box>
 
     <!-- Камера -->
-    <a-entity camera look-controls></a-entity>
+    <a-entity camera look-controls position="0 1.6 0"></a-entity>
   </a-scene>
 
   <script>
-    // Проверка загрузки MediaPipe Hands
-    if (typeof window.Hands === 'undefined') {
-      console.error("MediaPipe Hands not loaded. Ensure the script is loaded correctly.");
-      alert("Failed to load MediaPipe Hands. Check console for details.");
+    // Проверка поддержки WebXR
+    if (!navigator.xr) {
+      console.error("WebXR not supported by this browser/device.");
+      alert("WebXR not supported. Falling back to 3D mode.");
+    } else {
+      navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
+        if (!supported) {
+          console.error("Immersive AR not supported by this browser/device.");
+          alert("Immersive AR not supported. Falling back to 3D mode.");
+        }
+      }).catch((err) => {
+        console.error("WebXR support check failed:", err);
+        alert("WebXR check failed: " + err.message);
+      });
     }
 
     // Инициализация MediaPipe Hands
@@ -75,7 +85,6 @@
     let lastHandX = null;
 
     hands.onResults((results) => {
-      // Очистка канваса
       ctx.save();
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -85,7 +94,6 @@
 
       if (results.multiHandLandmarks) {
         for (const landmarks of results.multiHandLandmarks) {
-          // Рисуем ключевые точки руки
           for (const landmark of landmarks) {
             const x = landmark.x * canvas.width;
             const y = landmark.y * canvas.height;
@@ -95,18 +103,15 @@
             ctx.fill();
           }
 
-          // Определяем жест: открытая/закрытая ладонь
-          const thumbTip = landmarks[4]; // Кончик большого пальца
-          const indexTip = landmarks[8]; // Кончик указательного пальца
+          const thumbTip = landmarks[4];
+          const indexTip = landmarks[8];
           const distance = Math.sqrt(
             Math.pow(thumbTip.x - indexTip.x, 2) + Math.pow(thumbTip.y - indexTip.y, 2)
           );
-          isHandClosed = distance < 0.15; // Увеличили порог для надежности
+          isHandClosed = distance < 0.15;
 
-          // Центр руки для вращения
           const handX = landmarks[0].x * canvas.width;
 
-          // Управление масштабом (оба куба)
           let scale = parseFloat(targetObject1.getAttribute("scale").x);
           if (isHandClosed) {
             scale = Math.max(0.2, scale - 0.01);
@@ -116,7 +121,6 @@
           targetObject1.setAttribute("scale", `${scale} ${scale} ${scale}`);
           targetObject2.setAttribute("scale", `${scale} ${scale} ${scale}`);
 
-          // Управление вращением (оба куба)
           if (lastHandX !== null) {
             const deltaX = handX - lastHandX;
             let rotation1 = targetObject1.getAttribute("rotation");
@@ -134,16 +138,38 @@
       ctx.restore();
     });
 
-    // Инициализация камеры с использованием getUserMedia
+    // Проверка доступных камер и выбор задней камеры
     async function startCamera() {
       try {
+        // Получаем список устройств
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(device => device.kind === 'videoinput');
+        console.log("Available cameras:", videoDevices);
+
+        let videoConstraints = { width: window.innerWidth, height: window.innerHeight };
+        
+        // Ищем заднюю камеру
+        const rearCamera = videoDevices.find(device => 
+          device.label.toLowerCase().includes('back') || 
+          device.label.toLowerCase().includes('rear') || 
+          device.label.toLowerCase().includes('environment')
+        );
+
+        if (rearCamera) {
+          console.log("Using rear camera:", rearCamera.label);
+          videoConstraints.deviceId = { exact: rearCamera.deviceId };
+        } else {
+          console.warn("Rear camera not found, falling back to default camera.");
+          alert("Rear camera not found. AR may not work correctly. Using default camera.");
+          videoConstraints.facingMode = "environment"; // Пробуем через facingMode
+        }
+
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user", width: window.innerWidth, height: window.innerHeight }
+          video: videoConstraints
         });
         video.srcObject = stream;
         video.onloadedmetadata = () => {
           video.play();
-          // Запуск обработки кадров
           processFrame();
         };
       } catch (err) {
@@ -152,16 +178,13 @@
       }
     }
 
-    // Обработка кадров для MediaPipe
     async function processFrame() {
       await hands.send({ image: video });
       requestAnimationFrame(processFrame);
     }
 
-    // Запуск камеры
     startCamera();
 
-    // Адаптация канваса
     window.addEventListener("resize", () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
@@ -169,14 +192,13 @@
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    // Отладка AR
     const scene = document.querySelector("a-scene");
     scene.addEventListener("loaded", () => {
       console.log("A-Frame scene loaded");
     });
     scene.addEventListener("enter-vr", () => {
       console.log("Entered AR mode");
-      alert("AR mode activated! Look for the red and blue cubes.");
+      alert("AR mode activated! Look for the red and blue cubes on a flat surface.");
     });
     scene.addEventListener("exit-vr", () => {
       console.log("Exited AR mode");
