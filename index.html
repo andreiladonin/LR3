@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AR 3D Object with Gesture Control</title>
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/handtrackjs@0.1.1/dist/handtrack.min.js"></script>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    #videoCanvas { position: absolute; top: 0; left: 0; z-index: 100; }
+  </style>
+</head>
+<body>
+  <!-- Видеоэлемент для захвата камеры -->
+  <video id="myvideo" style="display: none;"></video>
+  <!-- Канвас для отображения отслеживания рук -->
+  <canvas id="videoCanvas"></canvas>
+
+  <!-- A-Frame сцена -->
+  <a-scene
+    vr-mode-ui="enabled: false"
+    arjs="sourceType: webcam; debugUIEnabled: false;"
+    renderer="logarithmicDepthBuffer: true;"
+  >
+    <!-- 3D-объект: куб -->
+    <a-box
+      id="targetObject"
+      position="0 0 -2"
+      rotation="0 0 0"
+      scale="0.5 0.5 0.5"
+      color="red"
+      material="opacity: 0.8;"
+    ></a-box>
+
+    <!-- Камера -->
+    <a-entity camera></a-entity>
+  </a-scene>
+
+  <script>
+    // Инициализация handtrack.js
+    const video = document.getElementById("myvideo");
+    const canvas = document.getElementById("videoCanvas");
+    const ctx = canvas.getContext("2d");
+    const modelParams = {
+      flipHorizontal: true,
+      maxNumBoxes: 1,
+      iouThreshold: 0.5,
+      scoreThreshold: 0.6,
+    };
+
+    let model = null;
+    let isHandClosed = false;
+    let lastHandX = null;
+
+    // Загрузка модели handtrack.js
+    handTrack.load(modelParams).then((lmodel) => {
+      model = lmodel;
+      startVideo();
+    });
+
+    // Запуск видео с камеры
+    function startVideo() {
+      handTrack.startVideo(video).then((status) => {
+        if (status) {
+          console.log("Video started");
+          runDetection();
+        } else {
+          console.log("Please enable video");
+        }
+      });
+    }
+
+    // Обработка жестов
+    function runDetection() {
+      model.detect(video).then((predictions) => {
+        model.renderPredictions(predictions, canvas, ctx, video);
+        const targetObject = document.getElementById("targetObject");
+
+        if (predictions.length > 0) {
+          const hand = predictions[0];
+          const { bbox } = hand;
+          const handWidth = bbox[2];
+          const handX = bbox[0] + handWidth / 2;
+
+          // Определение состояния руки: открытая или закрытая
+          const aspectRatio = bbox[2] / bbox[3];
+          isHandClosed = aspectRatio > 1.5; // Сжатая ладонь имеет большее соотношение ширины к высоте
+
+          // Управление масштабом
+          let scale = parseFloat(targetObject.getAttribute("scale").x);
+          if (isHandClosed) {
+            scale = Math.max(0.1, scale - 0.01); // Уменьшение масштаба
+          } else {
+            scale = Math.min(2.0, scale + 0.01); // Увеличение масштаба
+          }
+          targetObject.setAttribute("scale", `${scale} ${scale} ${scale}`);
+
+          // Управление вращением
+          if (lastHandX !== null) {
+            const deltaX = handX - lastHandX;
+            let rotation = targetObject.getAttribute("rotation");
+            rotation.y += deltaX * 0.5; // Вращение пропорционально перемещению руки
+            targetObject.setAttribute("rotation", rotation);
+          }
+          lastHandX = handX;
+        } else {
+          lastHandX = null; // Сброс при отсутствии руки
+        }
+
+        // Продолжение обработки
+        requestAnimationFrame(runDetection);
+      });
+    }
+
+    // Адаптация канваса под размер экрана
+    window.addEventListener("resize", () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    });
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  </script>
+</body>
+</html>
