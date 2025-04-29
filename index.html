@@ -3,16 +3,27 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Собери звёзды!</title>
-  <!-- A-Frame -->
-  <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+  <title>Собери звёзды! (Three.js)</title>
+  <!-- Three.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
   <!-- MediaPipe Hands -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js" crossorigin="anonymous"></script>
   <style>
     body { margin: 0; overflow: hidden; }
-    #videoCanvas { position: absolute; top: 0; left: 0; z-index: 100; opacity: 0.5; }
+    #rendererCanvas { 
+      position: absolute; 
+      top: 0; 
+      left: 0; 
+      z-index: 0; 
+    }
+    #videoCanvas { 
+      position: absolute; 
+      top: 0; 
+      left: 0; 
+      z-index: 100; 
+      opacity: 0.5; 
+    }
     video { display: none; }
-    a-scene { z-index: 0; }
     #scoreText { 
       position: absolute; 
       top: 10px; 
@@ -39,92 +50,60 @@
   <div id="scoreText">Счёт: 0</div>
   <div id="timerText">Время: 30</div>
 
-  <a-scene
-    embedded
-    vr-mode-ui="enabled: false"
-    renderer="logarithmicDepthBuffer: true;"
-    webxr="requiredFeatures: local-floor;"
-  >
-    <a-sky color="#1E90FF"></a-sky>
-    <!-- Ловушка (зелёное кольцо) -->
-    <a-torus
-      id="catcher"
-      position="0 0 -1"
-      radius="0.2"
-      radius-tubular="0.02"
-      color="green"
-      material="opacity: 0.8;"
-    ></a-torus>
-    <!-- Камера -->
-    <a-entity camera look-controls position="0 0 0"></a-entity>
-  </a-scene>
-
   <script>
-    if (!navigator.xr) {
-      console.error("WebXR not supported by this browser/device.");
-      alert("WebXR not supported. Falling back to 3D mode.");
-    } else {
-      navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
-        if (!supported) {
-          console.error("Immersive AR not supported by this browser/device.");
-          alert("Immersive AR not supported. Falling back to 3D mode.");
-        }
-      }).catch((err) => {
-        console.error("WebXR support check failed:", err);
-        alert("WebXR check failed: " + err.message);
-      });
-    }
+    // Инициализация Three.js
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.domElement.id = "rendererCanvas";
+    document.body.appendChild(renderer.domElement);
 
-    const video = document.getElementById("myvideo");
-    const canvas = document.getElementById("videoCanvas");
-    const ctx = canvas.getContext("2d");
+    // Устанавливаем голубой фон
+    scene.background = new THREE.Color(0x1E90FF);
 
-    const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${file}` });
-    hands.setOptions({
-      maxNumHands: 1,
-      modelComplexity: 0, // Уменьшаем сложность для повышения FPS
-      minDetectionConfidence: 0.5,
-      minTrackingConfidence: 0.5
-    });
+    // Позиция камеры
+    camera.position.set(0, 0, 0);
+    camera.lookAt(0, 0, -1);
 
-    let isHandClosed = false;
-    let score = 0;
-    let timeLeft = 30; // 30 секунд на игру
-    let gameRunning = true;
+    // Ловушка (зелёное кольцо)
+    const catcherGeometry = new THREE.TorusGeometry(0.2, 0.02, 16, 100);
+    const catcherMaterial = new THREE.MeshBasicMaterial({ color: 0x00FF00, transparent: true, opacity: 0.8 });
+    const catcher = new THREE.Mesh(catcherGeometry, catcherMaterial);
+    catcher.position.set(0, 0, -1);
+    scene.add(catcher);
 
-    const catcher = document.getElementById("catcher");
-    const scoreText = document.getElementById("scoreText");
-    const timerText = document.getElementById("timerText");
-    const stars = []; // Массив звёзд
+    // Массив звёзд
+    const stars = [];
 
     // Функция для создания звезды
     function createStar() {
-      const star = document.createElement("a-sphere");
-      star.setAttribute("id", `star-${stars.length}`);
-      star.setAttribute("radius", "0.1");
-      star.setAttribute("color", "yellow");
-      star.setAttribute("material", "opacity: 0.9");
+      const geometry = new THREE.SphereGeometry(0.1, 32, 32);
+      const material = new THREE.MeshBasicMaterial({ color: 0xFFFF00, transparent: true, opacity: 0.9 });
+      const star = new THREE.Mesh(geometry, material);
 
-      // Случайная начальная позиция
-      const x = (Math.random() - 0.5) * 4; // От -2 до 2
-      const y = (Math.random() - 0.5) * 4; // От -2 до 2
-      star.setAttribute("position", `${x} ${y} -3`);
+      const x = (Math.random() - 0.5) * 4;
+      const y = (Math.random() - 0.5) * 4;
+      star.position.set(x, y, -3);
 
-      // Анимация движения звезды к игроку
-      star.setAttribute("animation", `property: position; to: ${x} ${y} 0; dur: 5000; loop: true; easing: linear`);
-
-      document.querySelector("a-scene").appendChild(star);
-      stars.push(star);
+      scene.add(star);
+      stars.push({ mesh: star, startPos: { x, y, z: -3 }, endPos: { x, y, z: 0 }, t: 0 });
     }
 
     // Создаём звёзды каждые 2 секунды
+    let score = 0;
+    let timeLeft = 30;
+    let gameRunning = true;
+
     setInterval(() => {
-      if (gameRunning && stars.length < 5) { // Ограничим максимум 5 звёзд одновременно
+      if (gameRunning && stars.length < 5) {
         createStar();
       }
     }, 2000);
 
     // Таймер
+    const timerText = document.getElementById("timerText");
+    const scoreText = document.getElementById("scoreText");
     setInterval(() => {
       if (gameRunning) {
         timeLeft--;
@@ -136,6 +115,21 @@
       }
     }, 1000);
 
+    // Инициализация MediaPipe Hands
+    const video = document.getElementById("myvideo");
+    const canvas = document.getElementById("videoCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${file}` });
+    hands.setOptions({
+      maxNumHands: 1,
+      modelComplexity: 0,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+
+    let isHandClosed = false;
+
     hands.onResults((results) => {
       ctx.save();
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -143,7 +137,6 @@
 
       if (results.multiHandLandmarks && gameRunning) {
         for (const landmarks of results.multiHandLandmarks) {
-          // Рисуем ключевые точки руки
           for (const landmark of landmarks) {
             const x = landmark.x * canvas.width;
             const y = landmark.y * canvas.height;
@@ -153,7 +146,6 @@
             ctx.fill();
           }
 
-          // Определяем жест: открытая/закрытая ладонь
           const thumbTip = landmarks[4];
           const indexTip = landmarks[8];
           const distance = Math.sqrt(
@@ -161,28 +153,23 @@
           );
           isHandClosed = distance < 0.15;
 
-          // Позиция руки (центр ладони)
-          const handX = landmarks[0].x; // От 0 до 1
-          const handY = landmarks[0].y; // От 0 до 1
+          const handX = landmarks[0].x;
+          const handY = landmarks[0].y;
 
-          // Перемещаем ловушку в соответствии с рукой
-          const mappedX = (handX - 0.5) * 4; // От -2 до 2
-          const mappedY = -(handY - 0.5) * 4; // От -2 до 2 (инвертируем Y)
-          catcher.setAttribute("position", `${mappedX} ${mappedY} -1`);
+          const mappedX = (handX - 0.5) * 4;
+          const mappedY = -(handY - 0.5) * 4;
+          catcher.position.set(mappedX, mappedY, -1);
 
-          // Проверка столкновения со звёздами
           if (isHandClosed) {
             stars.forEach((star, index) => {
-              const starPos = star.getAttribute("position");
-              const catcherPos = catcher.getAttribute("position");
               const dist = Math.sqrt(
-                Math.pow(starPos.x - catcherPos.x, 2) +
-                Math.pow(starPos.y - catcherPos.y, 2)
+                Math.pow(star.mesh.position.x - catcher.position.x, 2) +
+                Math.pow(star.mesh.position.y - catcher.position.y, 2)
               );
 
-              if (dist < 0.3) { // Если ловушка ближе 0.3 единиц к звезде
-                star.parentNode.removeChild(star); // Удаляем звезду
-                stars.splice(index, 1); // Удаляем из массива
+              if (dist < 0.3) {
+                scene.remove(star.mesh);
+                stars.splice(index, 1);
                 score++;
                 scoreText.textContent = `Счёт: ${score}`;
               }
@@ -193,13 +180,34 @@
       ctx.restore();
     });
 
+    // Анимация звёзд
+    function animateStars() {
+      stars.forEach((star, index) => {
+        star.t += 0.016 / 5; // Скорость движения (0.016 ~ 60 FPS, 5 секунд на путь)
+        if (star.t > 1) star.t = 0; // Зацикливаем движение
+
+        star.mesh.position.x = star.startPos.x + (star.endPos.x - star.startPos.x) * star.t;
+        star.mesh.position.y = star.startPos.y + (star.endPos.y - star.startPos.y) * star.t;
+        star.mesh.position.z = star.startPos.z + (star.endPos.z - star.startPos.z) * star.t;
+      });
+    }
+
+    // Основной цикл анимации
+    function animate() {
+      requestAnimationFrame(animate);
+      animateStars();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    // Запуск камеры
     async function startCamera() {
       try {
         const devices = await navigator.mediaDevices.enumerateDevices();
         const videoDevices = devices.filter(device => device.kind === 'videoinput');
         console.log("Available cameras:", videoDevices);
 
-        let videoConstraints = { width: 640, height: 480 }; // Уменьшаем разрешение для повышения FPS
+        let videoConstraints = { width: 640, height: 480 };
         
         const rearCamera = videoDevices.find(device => 
           device.label.toLowerCase().includes('back') || 
@@ -240,36 +248,21 @@
     window.addEventListener("resize", () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
     });
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    const scene = document.querySelector("a-scene");
-    scene.addEventListener("loaded", () => {
-      console.log("A-Frame scene loaded");
-    });
-    scene.addEventListener("enter-vr", () => {
-      console.log("Entered AR mode");
-      alert("AR mode activated! Catch the stars with your hand!");
-    });
-    scene.addEventListener("exit-vr", () => {
-      console.log("Exited AR mode");
-    });
-    scene.addEventListener("arError", (e) => {
-      console.error("AR error:", e.detail);
-      alert("AR failed: " + e.detail);
-    });
-
-    scene.addEventListener("renderstart", () => {
-      console.log("Rendering started. Game should be visible.");
-    });
-
+    // Проверка рендеринга
     setTimeout(() => {
-      if (!scene.is('rendering')) {
-        console.warn("Rendering not started. Forcing scene render.");
-        scene.setAttribute('renderer', 'logarithmicDepthBuffer: true');
+      if (!renderer.domElement.isConnected) {
+        console.error("Renderer canvas not found in DOM!");
+      } else {
+        console.log("Three.js renderer initialized successfully.");
       }
-    }, 2000);
+    }, 1000);
   </script>
 </body>
 </html>
