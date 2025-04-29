@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AR 3D Object with Gesture Control</title>
+  <title>Собери звёзды!</title>
   <!-- A-Frame -->
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <!-- MediaPipe Hands -->
@@ -13,11 +13,31 @@
     #videoCanvas { position: absolute; top: 0; left: 0; z-index: 100; opacity: 0.5; }
     video { display: none; }
     a-scene { z-index: 0; }
+    #scoreText { 
+      position: absolute; 
+      top: 10px; 
+      left: 10px; 
+      color: white; 
+      font-size: 24px; 
+      z-index: 200; 
+      font-family: Arial, sans-serif;
+    }
+    #timerText { 
+      position: absolute; 
+      top: 10px; 
+      right: 10px; 
+      color: white; 
+      font-size: 24px; 
+      z-index: 200; 
+      font-family: Arial, sans-serif;
+    }
   </style>
 </head>
 <body>
   <video id="myvideo" autoplay playsinline></video>
   <canvas id="videoCanvas"></canvas>
+  <div id="scoreText">Счёт: 0</div>
+  <div id="timerText">Время: 30</div>
 
   <a-scene
     embedded
@@ -25,23 +45,17 @@
     renderer="logarithmicDepthBuffer: true;"
     webxr="requiredFeatures: local-floor;"
   >
-    <a-sky color="#87CEEB"></a-sky>
-    <a-box
-      id="targetObject1"
-      position="-0.3 0 -0.3"
-      rotation="0 0 0"
-      scale="0.5 0.5 0.5"
-      color="red"
+    <a-sky color="#1E90FF"></a-sky>
+    <!-- Ловушка (зелёное кольцо) -->
+    <a-torus
+      id="catcher"
+      position="0 0 -1"
+      radius="0.2"
+      radius-tubular="0.02"
+      color="green"
       material="opacity: 0.8;"
-    ></a-box>
-    <a-box
-      id="targetObject2"
-      position="0.3 0 -0.3"
-      rotation="0 0 0"
-      scale="0.5 0.5 0.5"
-      color="blue"
-      material="opacity: 0.8;"
-    ></a-box>
+    ></a-torus>
+    <!-- Камера -->
     <a-entity camera look-controls position="0 0 0"></a-entity>
   </a-scene>
 
@@ -68,32 +82,68 @@
     const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${file}` });
     hands.setOptions({
       maxNumHands: 1,
-      modelComplexity: 1,
+      modelComplexity: 0, // Уменьшаем сложность для повышения FPS
       minDetectionConfidence: 0.5,
       minTrackingConfidence: 0.5
     });
 
     let isHandClosed = false;
-    let lastHandX = null;
-    let targetRotationY = 0; // Целевой угол поворота
-    let currentRotationY = 0; // Текущий угол поворота (для сглаживания)
-    const smoothingFactor = 0.1; // Коэффициент сглаживания (0-1)
-    const rotationSpeed = 50; // Уменьшенный коэффициент вращения
+    let score = 0;
+    let timeLeft = 30; // 30 секунд на игру
+    let gameRunning = true;
 
-    // Массив для усреднения handX (фильтрация шума)
-    const handXHistory = [];
-    const historyLength = 5; // Количество кадров для усреднения
+    const catcher = document.getElementById("catcher");
+    const scoreText = document.getElementById("scoreText");
+    const timerText = document.getElementById("timerText");
+    const stars = []; // Массив звёзд
+
+    // Функция для создания звезды
+    function createStar() {
+      const star = document.createElement("a-sphere");
+      star.setAttribute("id", `star-${stars.length}`);
+      star.setAttribute("radius", "0.1");
+      star.setAttribute("color", "yellow");
+      star.setAttribute("material", "opacity: 0.9");
+
+      // Случайная начальная позиция
+      const x = (Math.random() - 0.5) * 4; // От -2 до 2
+      const y = (Math.random() - 0.5) * 4; // От -2 до 2
+      star.setAttribute("position", `${x} ${y} -3`);
+
+      // Анимация движения звезды к игроку
+      star.setAttribute("animation", `property: position; to: ${x} ${y} 0; dur: 5000; loop: true; easing: linear`);
+
+      document.querySelector("a-scene").appendChild(star);
+      stars.push(star);
+    }
+
+    // Создаём звёзды каждые 2 секунды
+    setInterval(() => {
+      if (gameRunning && stars.length < 5) { // Ограничим максимум 5 звёзд одновременно
+        createStar();
+      }
+    }, 2000);
+
+    // Таймер
+    setInterval(() => {
+      if (gameRunning) {
+        timeLeft--;
+        timerText.textContent = `Время: ${timeLeft}`;
+        if (timeLeft <= 0) {
+          gameRunning = false;
+          alert(`Игра окончена! Ваш счёт: ${score}`);
+        }
+      }
+    }, 1000);
 
     hands.onResults((results) => {
       ctx.save();
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      const targetObject1 = document.getElementById("targetObject1");
-      const targetObject2 = document.getElementById("targetObject2");
-
-      if (results.multiHandLandmarks) {
+      if (results.multiHandLandmarks && gameRunning) {
         for (const landmarks of results.multiHandLandmarks) {
+          // Рисуем ключевые точки руки
           for (const landmark of landmarks) {
             const x = landmark.x * canvas.width;
             const y = landmark.y * canvas.height;
@@ -103,6 +153,7 @@
             ctx.fill();
           }
 
+          // Определяем жест: открытая/закрытая ладонь
           const thumbTip = landmarks[4];
           const indexTip = landmarks[8];
           const distance = Math.sqrt(
@@ -110,37 +161,34 @@
           );
           isHandClosed = distance < 0.15;
 
-          // Усреднение handX для фильтрации шума
-          let handX = landmarks[0].x * canvas.width;
-          handXHistory.push(handX);
-          if (handXHistory.length > historyLength) handXHistory.shift();
-          const avgHandX = handXHistory.reduce((sum, val) => sum + val, 0) / handXHistory.length;
+          // Позиция руки (центр ладони)
+          const handX = landmarks[0].x; // От 0 до 1
+          const handY = landmarks[0].y; // От 0 до 1
 
-          // Вычисление смещения и целевого угла поворота
-          if (lastHandX !== null) {
-            const deltaX = avgHandX - lastHandX;
-            targetRotationY += deltaX * rotationSpeed;
-          }
-          lastHandX = avgHandX;
+          // Перемещаем ловушку в соответствии с рукой
+          const mappedX = (handX - 0.5) * 4; // От -2 до 2
+          const mappedY = -(handY - 0.5) * 4; // От -2 до 2 (инвертируем Y)
+          catcher.setAttribute("position", `${mappedX} ${mappedY} -1`);
 
-          // Сглаживание поворота (линейная интерполяция)
-          currentRotationY += (targetRotationY - currentRotationY) * smoothingFactor;
-
-          // Применение сглаженного поворота
-          targetObject1.setAttribute("rotation", `0 ${currentRotationY} 0`);
-          targetObject2.setAttribute("rotation", `0 ${currentRotationY} 0`);
-
-          let scale = parseFloat(targetObject1.getAttribute("scale").x);
+          // Проверка столкновения со звёздами
           if (isHandClosed) {
-            scale = Math.max(0.2, scale - 0.01);
-          } else {
-            scale = Math.min(2.0, scale + 0.01);
+            stars.forEach((star, index) => {
+              const starPos = star.getAttribute("position");
+              const catcherPos = catcher.getAttribute("position");
+              const dist = Math.sqrt(
+                Math.pow(starPos.x - catcherPos.x, 2) +
+                Math.pow(starPos.y - catcherPos.y, 2)
+              );
+
+              if (dist < 0.3) { // Если ловушка ближе 0.3 единиц к звезде
+                star.parentNode.removeChild(star); // Удаляем звезду
+                stars.splice(index, 1); // Удаляем из массива
+                score++;
+                scoreText.textContent = `Счёт: ${score}`;
+              }
+            });
           }
-          targetObject1.setAttribute("scale", `${scale} ${scale} ${scale}`);
-          targetObject2.setAttribute("scale", `${scale} ${scale} ${scale}`);
         }
-      } else {
-        lastHandX = null;
       }
       ctx.restore();
     });
@@ -151,7 +199,7 @@
         const videoDevices = devices.filter(device => device.kind === 'videoinput');
         console.log("Available cameras:", videoDevices);
 
-        let videoConstraints = { width: window.innerWidth, height: window.innerHeight };
+        let videoConstraints = { width: 640, height: 480 }; // Уменьшаем разрешение для повышения FPS
         
         const rearCamera = videoDevices.find(device => 
           device.label.toLowerCase().includes('back') || 
@@ -202,7 +250,7 @@
     });
     scene.addEventListener("enter-vr", () => {
       console.log("Entered AR mode");
-      alert("AR mode activated! Look for the red and blue cubes on a flat surface.");
+      alert("AR mode activated! Catch the stars with your hand!");
     });
     scene.addEventListener("exit-vr", () => {
       console.log("Exited AR mode");
@@ -213,7 +261,7 @@
     });
 
     scene.addEventListener("renderstart", () => {
-      console.log("Rendering started. Cubes should be visible in 3D mode.");
+      console.log("Rendering started. Game should be visible.");
     });
 
     setTimeout(() => {
@@ -222,25 +270,6 @@
         scene.setAttribute('renderer', 'logarithmicDepthBuffer: true');
       }
     }, 2000);
-
-    // Отладка FPS
-    let lastTime = performance.now();
-    let frameCount = 0;
-    let fps = 0;
-    setInterval(() => {
-      const now = performance.now();
-      const delta = (now - lastTime) / 1000;
-      fps = frameCount / delta;
-      console.log(`FPS: ${fps.toFixed(1)}`);
-      frameCount = 0;
-      lastTime = now;
-    }, 1000);
-
-    function tick() {
-      frameCount++;
-      requestAnimationFrame(tick);
-    }
-    tick();
   </script>
 </body>
 </html>
