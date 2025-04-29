@@ -8,7 +8,6 @@
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <!-- MediaPipe Hands -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1646424915/camera_utils.js" crossorigin="anonymous"></script>
   <style>
     body { margin: 0; overflow: hidden; }
     #videoCanvas { position: absolute; top: 0; left: 0; z-index: 100; opacity: 0.5; }
@@ -17,7 +16,7 @@
 </head>
 <body>
   <!-- Видео для захвата камеры -->
-  <video id="myvideo"></video>
+  <video id="myvideo" autoplay playsinline></video>
   <!-- Канвас для отображения отслеживания рук -->
   <canvas id="videoCanvas"></canvas>
 
@@ -47,6 +46,7 @@
     // Проверка загрузки MediaPipe Hands
     if (typeof window.Hands === 'undefined') {
       console.error("MediaPipe Hands not loaded. Ensure the script is loaded correctly.");
+      alert("Failed to load MediaPipe Hands. Check console for details.");
     }
 
     // Инициализация MediaPipe Hands
@@ -120,18 +120,32 @@
       ctx.restore();
     });
 
-    // Инициализация камеры
-    const camera = new Camera(video, {
-      onFrame: async () => {
-        await hands.send({ image: video });
-      },
-      width: window.innerWidth,
-      height: window.innerHeight
-    });
-    camera.start().catch((err) => {
-      console.error("Camera start error:", err);
-      alert("Failed to start camera: " + err.message);
-    });
+    // Инициализация камеры с использованием getUserMedia
+    async function startCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "user", width: window.innerWidth, height: window.innerHeight }
+        });
+        video.srcObject = stream;
+        video.onloadedmetadata = () => {
+          video.play();
+          // Запуск обработки кадров
+          processFrame();
+        };
+      } catch (err) {
+        console.error("Camera start error:", err);
+        alert("Failed to start camera: " + err.message);
+      }
+    }
+
+    // Обработка кадров для MediaPipe
+    async function processFrame() {
+      await hands.send({ image: video });
+      requestAnimationFrame(processFrame);
+    }
+
+    // Запуск камеры
+    startCamera();
 
     // Адаптация канваса
     window.addEventListener("resize", () => {
