@@ -12,50 +12,40 @@
     body { margin: 0; overflow: hidden; }
     #videoCanvas { position: absolute; top: 0; left: 0; z-index: 100; opacity: 0.5; }
     video { display: none; }
+    a-scene { z-index: 0; }
   </style>
 </head>
 <body>
-  <!-- Видео для захвата камеры -->
   <video id="myvideo" autoplay playsinline></video>
-  <!-- Канвас для отображения отслеживания рук -->
   <canvas id="videoCanvas"></canvas>
 
-  <!-- A-Frame сцена -->
   <a-scene
     embedded
     vr-mode-ui="enabled: false"
     renderer="logarithmicDepthBuffer: true;"
     webxr="requiredFeatures: local-floor;"
   >
-    <!-- Фон для 3D-режима -->
     <a-sky color="#87CEEB"></a-sky>
-
-    <!-- Первый куб (красный) -->
     <a-box
       id="targetObject1"
-      position="-0.3 0.5 -0.5"  <!-- Ближе к камере -->
+      position="-0.3 0 -0.3"
       rotation="0 0 0"
       scale="0.5 0.5 0.5"
       color="red"
       material="opacity: 0.8;"
     ></a-box>
-
-    <!-- Второй куб (синий) -->
     <a-box
       id="targetObject2"
-      position="0.3 0.5 -0.5"  <!-- Ближе к камере -->
+      position="0.3 0 -0.3"
       rotation="0 0 0"
       scale="0.5 0.5 0.5"
       color="blue"
       material="opacity: 0.8;"
     ></a-box>
-
-    <!-- Камера -->
-    <a-entity camera look-controls position="0 1.6 0"></a-entity>
+    <a-entity camera look-controls position="0 0 0"></a-entity>
   </a-scene>
 
   <script>
-    // Проверка поддержки WebXR
     if (!navigator.xr) {
       console.error("WebXR not supported by this browser/device.");
       alert("WebXR not supported. Falling back to 3D mode.");
@@ -71,7 +61,6 @@
       });
     }
 
-    // Инициализация MediaPipe Hands
     const video = document.getElementById("myvideo");
     const canvas = document.getElementById("videoCanvas");
     const ctx = canvas.getContext("2d");
@@ -86,6 +75,14 @@
 
     let isHandClosed = false;
     let lastHandX = null;
+    let targetRotationY = 0; // Целевой угол поворота
+    let currentRotationY = 0; // Текущий угол поворота (для сглаживания)
+    const smoothingFactor = 0.1; // Коэффициент сглаживания (0-1)
+    const rotationSpeed = 50; // Уменьшенный коэффициент вращения
+
+    // Массив для усреднения handX (фильтрация шума)
+    const handXHistory = [];
+    const historyLength = 5; // Количество кадров для усреднения
 
     hands.onResults((results) => {
       ctx.save();
@@ -113,7 +110,25 @@
           );
           isHandClosed = distance < 0.15;
 
-          const handX = landmarks[0].x * canvas.width;
+          // Усреднение handX для фильтрации шума
+          let handX = landmarks[0].x * canvas.width;
+          handXHistory.push(handX);
+          if (handXHistory.length > historyLength) handXHistory.shift();
+          const avgHandX = handXHistory.reduce((sum, val) => sum + val, 0) / handXHistory.length;
+
+          // Вычисление смещения и целевого угла поворота
+          if (lastHandX !== null) {
+            const deltaX = avgHandX - lastHandX;
+            targetRotationY += deltaX * rotationSpeed;
+          }
+          lastHandX = avgHandX;
+
+          // Сглаживание поворота (линейная интерполяция)
+          currentRotationY += (targetRotationY - currentRotationY) * smoothingFactor;
+
+          // Применение сглаженного поворота
+          targetObject1.setAttribute("rotation", `0 ${currentRotationY} 0`);
+          targetObject2.setAttribute("rotation", `0 ${currentRotationY} 0`);
 
           let scale = parseFloat(targetObject1.getAttribute("scale").x);
           if (isHandClosed) {
@@ -123,17 +138,6 @@
           }
           targetObject1.setAttribute("scale", `${scale} ${scale} ${scale}`);
           targetObject2.setAttribute("scale", `${scale} ${scale} ${scale}`);
-
-          if (lastHandX !== null) {
-            const deltaX = handX - lastHandX;
-            let rotation1 = targetObject1.getAttribute("rotation");
-            let rotation2 = targetObject2.getAttribute("rotation");
-            rotation1.y += deltaX * 100;
-            rotation2.y += deltaX * 100;
-            targetObject1.setAttribute("rotation", rotation1);
-            targetObject2.setAttribute("rotation", rotation2);
-          }
-          lastHandX = handX;
         }
       } else {
         lastHandX = null;
@@ -141,7 +145,6 @@
       ctx.restore();
     });
 
-    // Проверка доступных камер и выбор задней камеры
     async function startCamera() {
       try {
         const devices = await navigator.mediaDevices.enumerateDevices();
@@ -209,10 +212,35 @@
       alert("AR failed: " + e.detail);
     });
 
-    // Отладка рендеринга
     scene.addEventListener("renderstart", () => {
       console.log("Rendering started. Cubes should be visible in 3D mode.");
     });
+
+    setTimeout(() => {
+      if (!scene.is('rendering')) {
+        console.warn("Rendering not started. Forcing scene render.");
+        scene.setAttribute('renderer', 'logarithmicDepthBuffer: true');
+      }
+    }, 2000);
+
+    // Отладка FPS
+    let lastTime = performance.now();
+    let frameCount = 0;
+    let fps = 0;
+    setInterval(() => {
+      const now = performance.now();
+      const delta = (now - lastTime) / 1000;
+      fps = frameCount / delta;
+      console.log(`FPS: ${fps.toFixed(1)}`);
+      frameCount = 0;
+      lastTime = now;
+    }, 1000);
+
+    function tick() {
+      frameCount++;
+      requestAnimationFrame(tick);
+    }
+    tick();
   </script>
 </body>
 </html>
