@@ -129,6 +129,9 @@
     });
 
     let isHandClosed = false;
+    let targetX = 0; // Целевая позиция X для сглаживания
+    let targetY = 0; // Целевая позиция Y для сглаживания
+    const smoothingFactor = 0.1; // Коэффициент сглаживания
 
     hands.onResults((results) => {
       ctx.save();
@@ -153,12 +156,25 @@
           );
           isHandClosed = distance < 0.15;
 
-          const handX = landmarks[0].x;
-          const handY = landmarks[0].y;
+          // Используем кончик указательного пальца (точка 8) вместо запястья (точка 0)
+          const handX = landmarks[8].x; // Кончик указательного пальца
+          const handY = landmarks[8].y;
 
-          const mappedX = (handX - 0.5) * 4;
-          const mappedY = -(handY - 0.5) * 4;
-          catcher.position.set(mappedX, mappedY, -1);
+          // Отображаем "сочек" только на кончике указательного пальца
+          ctx.beginPath();
+          ctx.arc(handX * canvas.width, handY * canvas.height, 10, 0, 2 * Math.PI);
+          ctx.fillStyle = "red"; // Красная точка для наглядности
+          ctx.fill();
+
+          // Вычисляем целевую позицию для ловушки
+          targetX = (handX - 0.5) * 4;
+          targetY = -(handY - 0.5) * 4;
+
+          // Сглаживаем движение ловушки
+          const currentX = catcher.position.x;
+          const currentY = catcher.position.y;
+          catcher.position.x += (targetX - currentX) * smoothingFactor;
+          catcher.position.y += (targetY - currentY) * smoothingFactor;
 
           if (isHandClosed) {
             stars.forEach((star, index) => {
@@ -183,8 +199,8 @@
     // Анимация звёзд
     function animateStars() {
       stars.forEach((star, index) => {
-        star.t += 0.016 / 5; // Скорость движения (0.016 ~ 60 FPS, 5 секунд на путь)
-        if (star.t > 1) star.t = 0; // Зацикливаем движение
+        star.t += 0.016 / 5;
+        if (star.t > 1) star.t = 0;
 
         star.mesh.position.x = star.startPos.x + (star.endPos.x - star.startPos.x) * star.t;
         star.mesh.position.y = star.startPos.y + (star.endPos.y - star.startPos.y) * star.t;
