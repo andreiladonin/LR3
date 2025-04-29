@@ -25,15 +25,25 @@
     embedded
     vr-mode-ui="enabled: false"
     renderer="logarithmicDepthBuffer: true;"
-    webxr="requiredFeatures: local-floor, hand-tracking;"
+    webxr="requiredFeatures: local-floor;"
   >
-    <!-- 3D-объект: куб -->
+    <!-- Первый куб (красный) -->
     <a-box
-      id="targetObject"
-      position="0 0.5 -1"  <!-- Ближе к камере и чуть выше -->
+      id="targetObject1"
+      position="-0.3 0.5 -1"
       rotation="0 0 0"
-      scale="0.3 0.3 0.3"
+      scale="0.5 0.5 0.5"
       color="red"
+      material="opacity: 0.8;"
+    ></a-box>
+
+    <!-- Второй куб (синий) -->
+    <a-box
+      id="targetObject2"
+      position="0.3 0.5 -1"
+      rotation="0 0 0"
+      scale="0.5 0.5 0.5"
+      color="blue"
       material="opacity: 0.8;"
     ></a-box>
 
@@ -70,7 +80,8 @@
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      const targetObject = document.getElementById("targetObject");
+      const targetObject1 = document.getElementById("targetObject1");
+      const targetObject2 = document.getElementById("targetObject2");
 
       if (results.multiHandLandmarks) {
         for (const landmarks of results.multiHandLandmarks) {
@@ -90,26 +101,30 @@
           const distance = Math.sqrt(
             Math.pow(thumbTip.x - indexTip.x, 2) + Math.pow(thumbTip.y - indexTip.y, 2)
           );
-          isHandClosed = distance < 0.1;
+          isHandClosed = distance < 0.15; // Увеличили порог для надежности
 
           // Центр руки для вращения
           const handX = landmarks[0].x * canvas.width;
 
-          // Управление масштабом
-          let scale = parseFloat(targetObject.getAttribute("scale").x);
+          // Управление масштабом (оба куба)
+          let scale = parseFloat(targetObject1.getAttribute("scale").x);
           if (isHandClosed) {
-            scale = Math.max(0.1, scale - 0.01);
+            scale = Math.max(0.2, scale - 0.01);
           } else {
             scale = Math.min(2.0, scale + 0.01);
           }
-          targetObject.setAttribute("scale", `${scale} ${scale} ${scale}`);
+          targetObject1.setAttribute("scale", `${scale} ${scale} ${scale}`);
+          targetObject2.setAttribute("scale", `${scale} ${scale} ${scale}`);
 
-          // Управление вращением
+          // Управление вращением (оба куба)
           if (lastHandX !== null) {
             const deltaX = handX - lastHandX;
-            let rotation = targetObject.getAttribute("rotation");
-            rotation.y += deltaX * 100;
-            targetObject.setAttribute("rotation", rotation);
+            let rotation1 = targetObject1.getAttribute("rotation");
+            let rotation2 = targetObject2.getAttribute("rotation");
+            rotation1.y += deltaX * 100;
+            rotation2.y += deltaX * 100;
+            targetObject1.setAttribute("rotation", rotation1);
+            targetObject2.setAttribute("rotation", rotation2);
           }
           lastHandX = handX;
         }
@@ -161,7 +176,7 @@
     });
     scene.addEventListener("enter-vr", () => {
       console.log("Entered AR mode");
-      alert("AR mode activated!");
+      alert("AR mode activated! Look for the red and blue cubes.");
     });
     scene.addEventListener("exit-vr", () => {
       console.log("Exited AR mode");
