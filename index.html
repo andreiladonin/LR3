@@ -42,6 +42,23 @@
       z-index: 200; 
       font-family: Arial, sans-serif;
     }
+    #restartButton { 
+      position: absolute; 
+      bottom: 20px; 
+      left: 50%; 
+      transform: translateX(-50%); 
+      padding: 10px 20px; 
+      background-color: #ff4444; 
+      color: white; 
+      border: none; 
+      border-radius: 5px; 
+      font-size: 18px; 
+      z-index: 200; 
+      cursor: pointer; 
+    }
+    #restartButton:hover {
+      background-color: #cc0000;
+    }
   </style>
 </head>
 <body>
@@ -49,6 +66,7 @@
   <canvas id="videoCanvas"></canvas>
   <div id="scoreText">Счёт: 0</div>
   <div id="timerText">Время: 30</div>
+  <button id="restartButton">Рестарт</button>
 
   <script>
     // Инициализация Three.js
@@ -76,6 +94,13 @@
     // Массив звёзд
     const stars = [];
 
+    // Переменные для игры
+    let score = 0;
+    let timeLeft = 30;
+    let gameRunning = true;
+    let targetScale = 1; // Целевая шкала для размера ловушки
+    const scaleSmoothingFactor = 0.1; // Коэффициент сглаживания для размера
+
     // Функция для создания звезды
     function createStar() {
       const geometry = new THREE.SphereGeometry(0.1, 32, 32);
@@ -90,11 +115,25 @@
       stars.push({ mesh: star, startPos: { x, y, z: -3 }, endPos: { x, y, z: 0 }, t: 0 });
     }
 
-    // Создаём звёзды каждые 2 секунды
-    let score = 0;
-    let timeLeft = 30;
-    let gameRunning = true;
+    // Функция для очистки звёзд
+    function clearStars() {
+      stars.forEach(star => scene.remove(star.mesh));
+      stars.length = 0;
+    }
 
+    // Функция рестарта игры
+    function restartGame() {
+      clearStars();
+      score = 0;
+      timeLeft = 30;
+      gameRunning = true;
+      scoreText.textContent = `Счёт: ${score}`;
+      timerText.textContent = `Время: ${timeLeft}`;
+      catcher.scale.set(1, 1, 1); // Сбрасываем размер ловушки
+      targetScale = 1;
+    }
+
+    // Создаём звёзды каждые 2 секунды
     setInterval(() => {
       if (gameRunning && stars.length < 5) {
         createStar();
@@ -115,6 +154,10 @@
       }
     }, 1000);
 
+    // Кнопка рестарта
+    const restartButton = document.getElementById("restartButton");
+    restartButton.addEventListener("click", restartGame);
+
     // Инициализация MediaPipe Hands
     const video = document.getElementById("myvideo");
     const canvas = document.getElementById("videoCanvas");
@@ -129,9 +172,9 @@
     });
 
     let isHandClosed = false;
-    let targetX = 0; // Целевая позиция X для сглаживания
-    let targetY = 0; // Целевая позиция Y для сглаживания
-    const smoothingFactor = 0.1; // Коэффициент сглаживания
+    let targetX = 0;
+    let targetY = 0;
+    const smoothingFactor = 0.1;
 
     hands.onResults((results) => {
       ctx.save();
@@ -156,14 +199,26 @@
           );
           isHandClosed = distance < 0.15;
 
-          // Используем кончик указательного пальца (точка 8) вместо запястья (точка 0)
-          const handX = landmarks[8].x; // Кончик указательного пальца
+          // Управление размером ловушки
+          if (distance > 0.3) { // Пальцы разведены
+            targetScale = Math.min(targetScale + 0.1, 2.0); // Максимальный масштаб 2
+          } else if (isHandClosed) { // Пальцы сжаты
+            targetScale = Math.max(targetScale - 0.1, 0.5); // Минимальный масштаб 0.5
+          }
+
+          // Плавное изменение размера
+          const currentScale = catcher.scale.x;
+          const newScale = currentScale + (targetScale - currentScale) * scaleSmoothingFactor;
+          catcher.scale.set(newScale, newScale, newScale);
+
+          // Используем кончик указательного пальца (точка 8)
+          const handX = landmarks[8].x;
           const handY = landmarks[8].y;
 
-          // Отображаем "сочек" только на кончике указательного пальца
+          // Отображаем "сочек" на кончике указательного пальца
           ctx.beginPath();
           ctx.arc(handX * canvas.width, handY * canvas.height, 10, 0, 2 * Math.PI);
-          ctx.fillStyle = "red"; // Красная точка для наглядности
+          ctx.fillStyle = "red";
           ctx.fill();
 
           // Вычисляем целевую позицию для ловушки
@@ -183,7 +238,9 @@
                 Math.pow(star.mesh.position.y - catcher.position.y, 2)
               );
 
-              if (dist < 0.3) {
+              // Учитываем размер ловушки при проверке столкновения
+              const catcherRadius = 0.2 * catcher.scale.x; // Радиус ловушки зависит от масштаба
+              if (dist < catcherRadius + 0.1) { // 0.1 - радиус звезды
                 scene.remove(star.mesh);
                 stars.splice(index, 1);
                 score++;
