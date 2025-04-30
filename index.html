@@ -3,11 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Собери звёзды! (Three.js)</title>
-  <!-- Three.js -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
-  <!-- MediaPipe Hands -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js" crossorigin="anonymous"></script>
+  <title>Star Catcher</title>
   <style>
     body { margin: 0; overflow: hidden; }
     #rendererCanvas { 
@@ -65,34 +61,33 @@
 <body>
   <video id="myvideo" autoplay playsinline></video>
   <canvas id="videoCanvas"></canvas>
-  <div id="scoreText">Счёт: 0</div>
-  <div id="timerText">Время: 30</div>
-  <button id="restartButton">Рестарт</button>
+  <div id="scoreText">Score: 0</div>
+  <div id="timerText">Time: 30</div>
+  <button id="restartButton">Restart</button>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js" crossorigin="anonymous"></script>
 
   <script>
-    // Инициализация Three.js
+    // Three.js initialization
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.domElement.id = "rendererCanvas";
     document.body.appendChild(renderer.domElement);
-
-    // Устанавливаем голубой фон
     scene.background = new THREE.Color(0x1E90FF);
-
-    // Позиция камеры
     camera.position.set(0, 0, 0);
     camera.lookAt(0, 0, -1);
 
-    // Ловушка (зелёное кольцо)
+    // Catcher (green ring)
     const catcherGeometry = new THREE.TorusGeometry(0.2, 0.02, 16, 100);
     const catcherMaterial = new THREE.MeshBasicMaterial({ color: 0x00FF00, transparent: true, opacity: 0.8 });
     const catcher = new THREE.Mesh(catcherGeometry, catcherMaterial);
     catcher.position.set(0, 0, -1);
     scene.add(catcher);
 
-    // Визуальный индикатор области захвата (полупрозрачный круг)
+    // Catcher area (semi-transparent circle)
     const catcherAreaGeometry = new THREE.CircleGeometry(0.2, 32);
     const catcherAreaMaterial = new THREE.MeshBasicMaterial({ color: 0x00FF00, transparent: true, opacity: 0.3 });
     const catcherArea = new THREE.Mesh(catcherAreaGeometry, catcherAreaMaterial);
@@ -100,75 +95,76 @@
     catcherArea.rotation.x = -Math.PI / 2;
     scene.add(catcherArea);
 
-    // Массив звёзд
+    // Stars array
     const stars = [];
 
-    // Переменные для игры
+    // Game variables
     let score = 0;
     let timeLeft = 30;
     let gameRunning = true;
     let targetScale = 1;
     const scaleSmoothingFactor = 0.1;
 
-    // Функция для создания звезды
+    // Function to create a star
     function createStar() {
       const geometry = new THREE.SphereGeometry(0.1, 32, 32);
       const material = new THREE.MeshBasicMaterial({ color: 0xFFFF00, transparent: true, opacity: 0.9 });
       const star = new THREE.Mesh(geometry, material);
 
-      const x = (Math.random() - 0.5) * 4;
-      const y = (Math.random() - 0.5) * 4;
+      // Reduced range for star appearance: -1.5 to 1.5
+      const x = (Math.random() - 0.5) * 3;
+      const y = (Math.random() - 0.5) * 3;
       star.position.set(x, y, -3);
 
       scene.add(star);
       stars.push({ mesh: star, startPos: { x, y, z: -3 }, endPos: { x, y, z: 0 }, t: 0 });
     }
 
-    // Функция для очистки звёзд
+    // Function to clear stars
     function clearStars() {
       stars.forEach(star => scene.remove(star.mesh));
       stars.length = 0;
     }
 
-    // Функция рестарта игры
+    // Function to restart the game
     function restartGame() {
       clearStars();
       score = 0;
       timeLeft = 30;
       gameRunning = true;
-      scoreText.textContent = `Счёт: ${score}`;
-      timerText.textContent = `Время: ${timeLeft}`;
+      scoreText.textContent = `Score: ${score}`;
+      timerText.textContent = `Time: ${timeLeft}`;
       catcher.scale.set(1, 1, 1);
       catcherArea.scale.set(1, 1, 1);
       targetScale = 1;
     }
 
-    // Создаём звёзды каждые 2 секунды
+    // Create stars every 2 seconds
     setInterval(() => {
       if (gameRunning && stars.length < 5) {
         createStar();
       }
     }, 2000);
 
-    // Таймер
+    // Timer
     const timerText = document.getElementById("timerText");
     const scoreText = document.getElementById("scoreText");
     setInterval(() => {
       if (gameRunning) {
         timeLeft--;
-        timerText.textContent = `Время: ${timeLeft}`;
+        timerText.textContent = `Time: ${timeLeft}`;
         if (timeLeft <= 0) {
           gameRunning = false;
-          alert(`Игра окончена! Ваш счёт: ${score}`);
+          alert(`Game over! Your score: ${score}`);
         }
       }
     }, 1000);
 
-    // Кнопка рестарта
+    // Restart button
     const restartButton = document.getElementById("restartButton");
     restartButton.addEventListener("click", restartGame);
 
-    // Инициализация MediaPipe Hands
+    // MediaPipe Hands initialization
     const video = document.getElementById("myvideo");
     const canvas = document.getElementById("videoCanvas");
     const ctx = canvas.getContext("2d");
@@ -207,16 +203,14 @@
           const distance = Math.sqrt(
             Math.pow(thumbTip.x - indexTip.x, 2) + Math.pow(thumbTip.y - indexTip.y, 2)
           );
-          isHandClosed = distance < 0.2; // Увеличили порог
+          isHandClosed = distance < 0.2;
 
-          // Визуальный эффект: меняем цвет ловушки, когда жест захвата активен
           if (isHandClosed) {
-            catcherMaterial.color.setHex(0xFFFF00); // Жёлтый
+            catcherMaterial.color.setHex(0xFFFF00); // Yellow
           } else {
-            catcherMaterial.color.setHex(0x00FF00); // Зелёный
+            catcherMaterial.color.setHex(0x00FF00); // Green
           }
 
-          // Управление размером ловушки
           if (distance > 0.3) {
             targetScale = Math.min(targetScale + 0.1, 2.0);
           } else if (isHandClosed) {
@@ -228,21 +222,18 @@
           catcher.scale.set(newScale, newScale, newScale);
           catcherArea.scale.set(newScale, newScale, newScale);
 
-          // Используем кончик указательного пальца (точка 8)
           const handX = 1 - landmarks[8].x;
           const handY = landmarks[8].y;
 
-          // Отображаем "сочек" на кончике указательного пальца
           ctx.beginPath();
           ctx.arc((1 - handX) * canvas.width, handY * canvas.height, 10, 0, 2 * Math.PI);
           ctx.fillStyle = "red";
           ctx.fill();
 
-          // Вычисляем целевую позицию для ловушки
-          targetX = (handX - 0.5) * 4;
-          targetY = -(handY - 0.5) * 4;
+          // Restrict targetX and targetY to -1.5 to 1.5
+          targetX = Math.max(-1.5, Math.min(1.5, (handX - 0.5) * 4));
+          targetY = Math.max(-1.5, Math.min(1.5, -(handY - 0.5) * 4));
 
-          // Сглаживаем движение ловушки
           const currentX = catcher.position.x;
           const currentY = catcher.position.y;
           catcher.position.x += (targetX - currentX) * smoothingFactor;
@@ -256,13 +247,13 @@
                 Math.pow(star.mesh.position.y - catcher.position.y, 2)
               );
               const distZ = Math.abs(star.mesh.position.z - catcher.position.z);
-              const catcherRadius = 0.4 * catcher.scale.x; // Увеличили радиус
+              const catcherRadius = 0.4 * catcher.scale.x;
 
               if (distXY < catcherRadius + 0.1 && distZ < 0.5) {
                 scene.remove(star.mesh);
                 stars.splice(index, 1);
                 score++;
-                scoreText.textContent = `Счёт: ${score}`;
+                scoreText.textContent = `Score: ${score}`;
               }
             });
           }
@@ -271,7 +262,7 @@
       ctx.restore();
     });
 
-    // Анимация звёзд
+    // Star animation
     function animateStars() {
       stars.forEach((star, index) => {
         star.t += 0.016 / 5;
@@ -283,7 +274,7 @@
       });
     }
 
-    // Основной цикл анимации
+    // Main animation loop
     function animate() {
       requestAnimationFrame(animate);
       animateStars();
@@ -291,7 +282,7 @@
     }
     animate();
 
-    // Запуск камеры
+    // Start camera
     async function startCamera() {
       try {
         const devices = await navigator.mediaDevices.enumerateDevices();
@@ -336,7 +327,7 @@
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    // Проверка рендеринга
+    // Check rendering
     setTimeout(() => {
       if (!renderer.domElement.isConnected) {
         console.error("Renderer canvas not found in DOM!");
