@@ -22,6 +22,7 @@
       left: 0; 
       z-index: 100; 
       opacity: 0.5; 
+      transform: scaleX(-1); /* Переворачиваем видео по горизонтали */
     }
     video { display: none; }
     #scoreText { 
@@ -98,8 +99,8 @@
     let score = 0;
     let timeLeft = 30;
     let gameRunning = true;
-    let targetScale = 1; // Целевая шкала для размера ловушки
-    const scaleSmoothingFactor = 0.1; // Коэффициент сглаживания для размера
+    let targetScale = 1;
+    const scaleSmoothingFactor = 0.1;
 
     // Функция для создания звезды
     function createStar() {
@@ -129,7 +130,7 @@
       gameRunning = true;
       scoreText.textContent = `Счёт: ${score}`;
       timerText.textContent = `Время: ${timeLeft}`;
-      catcher.scale.set(1, 1, 1); // Сбрасываем размер ловушки
+      catcher.scale.set(1, 1, 1);
       targetScale = 1;
     }
 
@@ -200,24 +201,23 @@
           isHandClosed = distance < 0.15;
 
           // Управление размером ловушки
-          if (distance > 0.3) { // Пальцы разведены
-            targetScale = Math.min(targetScale + 0.1, 2.0); // Максимальный масштаб 2
-          } else if (isHandClosed) { // Пальцы сжаты
-            targetScale = Math.max(targetScale - 0.1, 0.5); // Минимальный масштаб 0.5
+          if (distance > 0.3) {
+            targetScale = Math.min(targetScale + 0.1, 2.0);
+          } else if (isHandClosed) {
+            targetScale = Math.max(targetScale - 0.1, 0.5);
           }
 
-          // Плавное изменение размера
           const currentScale = catcher.scale.x;
           const newScale = currentScale + (targetScale - currentScale) * scaleSmoothingFactor;
           catcher.scale.set(newScale, newScale, newScale);
 
           // Используем кончик указательного пальца (точка 8)
-          const handX = landmarks[8].x;
+          const handX = 1 - landmarks[8].x; // Инвертируем X для исправления зеркальности
           const handY = landmarks[8].y;
 
           // Отображаем "сочек" на кончике указательного пальца
           ctx.beginPath();
-          ctx.arc(handX * canvas.width, handY * canvas.height, 10, 0, 2 * Math.PI);
+          ctx.arc((1 - handX) * canvas.width, handY * canvas.height, 10, 0, 2 * Math.PI); // Учитываем CSS-переворот
           ctx.fillStyle = "red";
           ctx.fill();
 
@@ -238,9 +238,8 @@
                 Math.pow(star.mesh.position.y - catcher.position.y, 2)
               );
 
-              // Учитываем размер ловушки при проверке столкновения
-              const catcherRadius = 0.2 * catcher.scale.x; // Радиус ловушки зависит от масштаба
-              if (dist < catcherRadius + 0.1) { // 0.1 - радиус звезды
+              const catcherRadius = 0.2 * catcher.scale.x;
+              if (dist < catcherRadius + 0.1) {
                 scene.remove(star.mesh);
                 stars.splice(index, 1);
                 score++;
@@ -280,23 +279,13 @@
         const videoDevices = devices.filter(device => device.kind === 'videoinput');
         console.log("Available cameras:", videoDevices);
 
-        let videoConstraints = { width: 640, height: 480 };
+        let videoConstraints = { 
+          width: 640, 
+          height: 480, 
+          facingMode: "user", // Фронтальная камера
+          advanced: [{ facingMode: "user", mirrored: false }] // Пытаемся отключить зеркальность (зависит от браузера)
+        };
         
-        const rearCamera = videoDevices.find(device => 
-          device.label.toLowerCase().includes('back') || 
-          device.label.toLowerCase().includes('rear') || 
-          device.label.toLowerCase().includes('environment')
-        );
-
-        if (rearCamera) {
-          console.log("Using rear camera:", rearCamera.label);
-          videoConstraints.deviceId = { exact: rearCamera.deviceId };
-        } else {
-          console.warn("Rear camera not found, falling back to default camera.");
-          alert("Rear camera not found. Using default camera. Switch to rear camera if possible.");
-          videoConstraints.facingMode = "environment";
-        }
-
         const stream = await navigator.mediaDevices.getUserMedia({
           video: videoConstraints
         });
