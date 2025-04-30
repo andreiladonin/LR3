@@ -22,7 +22,7 @@
       left: 0; 
       z-index: 100; 
       opacity: 0.5; 
-      transform: scaleX(-1); /* Переворачиваем видео по горизонтали */
+      transform: scaleX(-1);
     }
     video { display: none; }
     #scoreText { 
@@ -92,6 +92,14 @@
     catcher.position.set(0, 0, -1);
     scene.add(catcher);
 
+    // Визуальный индикатор области захвата (полупрозрачный круг внутри ловушки)
+    const catcherAreaGeometry = new THREE.CircleGeometry(0.2, 32);
+    const catcherAreaMaterial = new THREE.MeshBasicMaterial({ color: 0x00FF00, transparent: true, opacity: 0.3 });
+    const catcherArea = new THREE.Mesh(catcherAreaGeometry, catcherAreaMaterial);
+    catcherArea.position.set(0, 0, -1);
+    catcherArea.rotation.x = -Math.PI / 2; // Поворачиваем круг, чтобы он был перпендикулярен камере
+    scene.add(catcherArea);
+
     // Массив звёзд
     const stars = [];
 
@@ -131,6 +139,7 @@
       scoreText.textContent = `Счёт: ${score}`;
       timerText.textContent = `Время: ${timeLeft}`;
       catcher.scale.set(1, 1, 1);
+      catcherArea.scale.set(1, 1, 1);
       targetScale = 1;
     }
 
@@ -175,7 +184,7 @@
     let isHandClosed = false;
     let targetX = 0;
     let targetY = 0;
-    const smoothingFactor = 0.1;
+    const smoothingFactor = 0.2; // Увеличиваем для более быстрого движения
 
     hands.onResults((results) => {
       ctx.save();
@@ -210,14 +219,15 @@
           const currentScale = catcher.scale.x;
           const newScale = currentScale + (targetScale - currentScale) * scaleSmoothingFactor;
           catcher.scale.set(newScale, newScale, newScale);
+          catcherArea.scale.set(newScale, newScale, newScale); // Масштабируем индикатор области
 
           // Используем кончик указательного пальца (точка 8)
-          const handX = 1 - landmarks[8].x; // Инвертируем X для исправления зеркальности
+          const handX = 1 - landmarks[8].x;
           const handY = landmarks[8].y;
 
           // Отображаем "сочек" на кончике указательного пальца
           ctx.beginPath();
-          ctx.arc((1 - handX) * canvas.width, handY * canvas.height, 10, 0, 2 * Math.PI); // Учитываем CSS-переворот
+          ctx.arc((1 - handX) * canvas.width, handY * canvas.height, 10, 0, 2 * Math.PI);
           ctx.fillStyle = "red";
           ctx.fill();
 
@@ -230,16 +240,19 @@
           const currentY = catcher.position.y;
           catcher.position.x += (targetX - currentX) * smoothingFactor;
           catcher.position.y += (targetY - currentY) * smoothingFactor;
+          catcherArea.position.set(catcher.position.x, catcher.position.y, catcher.position.z);
 
           if (isHandClosed) {
             stars.forEach((star, index) => {
-              const dist = Math.sqrt(
+              const distXY = Math.sqrt(
                 Math.pow(star.mesh.position.x - catcher.position.x, 2) +
                 Math.pow(star.mesh.position.y - catcher.position.y, 2)
               );
+              const distZ = Math.abs(star.mesh.position.z - catcher.position.z);
+              const catcherRadius = 0.3 * catcher.scale.x; // Увеличиваем базовый радиус
 
-              const catcherRadius = 0.2 * catcher.scale.x;
-              if (dist < catcherRadius + 0.1) {
+              // Проверяем столкновение в 2D и по оси Z
+              if (distXY < catcherRadius + 0.1 && distZ < 0.5) {
                 scene.remove(star.mesh);
                 stars.splice(index, 1);
                 score++;
@@ -282,8 +295,8 @@
         let videoConstraints = { 
           width: 640, 
           height: 480, 
-          facingMode: "user", // Фронтальная камера
-          advanced: [{ facingMode: "user", mirrored: false }] // Пытаемся отключить зеркальность (зависит от браузера)
+          facingMode: "user",
+          advanced: [{ facingMode: "user", mirrored: false }]
         };
         
         const stream = await navigator.mediaDevices.getUserMedia({
